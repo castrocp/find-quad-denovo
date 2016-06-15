@@ -6,7 +6,7 @@ import re
 import time
 
 # run program as:
-# find-trio-denovo.py <VCFfilename> <first person> <second person> <third person> <fourth person> (type "dad" "mom" "child", or "child2")
+# find-quad-denovo.py <VCFfilename> <first person> <second person> <third person> <fourth person> (type "dad" "mom" "child", or "child2")
 # "child" will be the one compared against the parents
 # "child2" will be ignored
 
@@ -21,6 +21,7 @@ def main():
 
     variant_count = 0 #counts phased and unphased variants
     unphased_count = 0 #separate counter for variants with all lines treated as unphased
+    have_data = True
 
     with open (inFileName, 'r') as infile:  #when you use "with open" you don't have to close the file later
             with open (inFileName + ".variants", "w") as variantFile: 
@@ -30,14 +31,15 @@ def main():
                             variantFile.write(line) 
                             unphasedFile.write(line) 
                         else:
-                            (is_variant, is_unphased) = process_line(line, dadIdx-2, momIdx-2, childIdx-2, child2Idx-2, variant_count, unphased_count)
-                            if is_variant:
-                                variant_count += 1
-                                variantFile.write(line) #variants with phased and unphased lines treated separately
+                            (is_variant, is_unphased, have_data) = process_line(line, dadIdx-2, momIdx-2, childIdx-2, child2Idx-2, variant_count, unphased_count)
+                            if have_data:
+                                if is_variant:
+                                    variant_count += 1
+                                    variantFile.write(line) #variants with phased and unphased lines treated separately
 
-                            if is_unphased:
-                                unphased_count += 1
-                                unphasedFile.write(line) #variants with all lines treated as unphased
+                                if is_unphased:
+                                    unphased_count += 1
+                                    unphasedFile.write(line) #variants with all lines treated as unphased
 
                     completion_msg = "\nThe script took {0} minutes\n".format((time.time() - startTime)/60)
 
@@ -51,6 +53,7 @@ def main():
 def process_line(line, dadIdx, momIdx, childIdx, child2Idx, variant_count, unphased_count):
         is_unphased = False
         is_variant = False
+        have_data = True
 
         (chrom, pos, ID, ref, alt, qual, Filter, info, format, samples) = line.strip("\n").split("\t", 9)
         samples = samples.split("\t")
@@ -61,6 +64,10 @@ def process_line(line, dadIdx, momIdx, childIdx, child2Idx, variant_count, unpha
         (dadAlleles, dadPhased) = extract_genes(dadgeno)
         (momAlleles, momPhased) = extract_genes(momgeno)
         (childAlleles, childPhased) = extract_genes(childgeno)
+
+        #check to see if genotype information is missing
+        if "." in dadAlleles or "." in momAlleles or "." in childAlleles:
+            have_data = False
 
         # assumes that delimiter on dadGeno is same as momGeno and childGeno
         if dadPhased != momPhased or dadPhased != childPhased:
@@ -86,7 +93,7 @@ def process_line(line, dadIdx, momIdx, childIdx, child2Idx, variant_count, unpha
         if (phased and (not child_in_dad[0] or not child_in_mom[1])): # variant because one or both parents
                 is_variant = True                                     # didn't contribute an allele to the child
 
-        return (is_variant, is_unphased)
+        return (is_variant, is_unphased, have_data)
 
 def extract_genes(unparsed_geno):
         # split the data by ":", to access only the genotype
